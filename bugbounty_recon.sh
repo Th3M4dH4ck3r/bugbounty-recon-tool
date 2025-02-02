@@ -18,9 +18,160 @@ function banner() {
 # Run the banner
 banner
 
+# Progress monitoring function
+function show_progress() {
+    local results_dir="$1"
+    clear
+    
+    # Define colors
+    local RED='\e[1;31m'
+    local GREEN='\e[1;32m'
+    local YELLOW='\e[1;33m'
+    local BLUE='\e[1;34m'
+    local MAGENTA='\e[1;35m'
+    local CYAN='\e[1;36m'
+    local WHITE='\e[1;37m'
+    local RESET='\e[0m'
+    local BOLD='\e[1m'
+    
+    # Header
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${RESET}"
+    echo -e "${CYAN}║${BOLD}         🎯 RECON PROGRESS MONITOR 🎯        ${CYAN}║${RESET}"
+    echo -e "${CYAN}║${WHITE}          Target: $DOMAIN          ${CYAN}║${RESET}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${RESET}"
+    echo
+
+    # Subdomain Section
+    echo -e "${BLUE}[+] Subdomain Enumeration${RESET}"
+    echo -e "${WHITE}├─── Subfinder: ${GREEN}$(wc -l < "$results_dir/subfinder.txt" 2>/dev/null || echo "0") domains${RESET}"
+    echo -e "${WHITE}├─── Amass:    ${GREEN}$(wc -l < "$results_dir/amass.txt" 2>/dev/null || echo "0") domains${RESET}"
+    echo -e "${WHITE}└─── Crt.sh:   ${GREEN}$(wc -l < "$results_dir/crtsh.txt" 2>/dev/null || echo "0") domains${RESET}"
+    echo
+
+    # Live Hosts Section
+    echo -e "${MAGENTA}[+] Live Hosts Detection${RESET}"
+    echo -e "${WHITE}├─── Active Subdomains: ${GREEN}$(wc -l < "$results_dir/live_subdomains.txt" 2>/dev/null || echo "0")${RESET}"
+    echo -e "${WHITE}└─── Open Ports:        ${GREEN}$(wc -l < "$results_dir/ports.txt" 2>/dev/null || echo "0")${RESET}"
+    echo
+
+    # Assets Section
+    echo -e "${YELLOW}[+] Asset Discovery${RESET}"
+    echo -e "${WHITE}├─── JavaScript Files: ${GREEN}$(wc -l < "$results_dir/js-files/all_js.txt" 2>/dev/null || echo "0")${RESET}"
+    echo -e "${WHITE}└─── Directories:      ${GREEN}$(find "$results_dir/content-discovery" -type f -exec cat {} \; 2>/dev/null | wc -l || echo "0")${RESET}"
+    echo
+
+    # Vulnerabilities Section
+    local nuclei_findings=$(find "$results_dir" -name "nuclei_*.txt" -exec cat {} \; 2>/dev/null | wc -l || echo "0")
+    echo -e "${RED}[+] Security Findings${RESET}"
+    echo -e "${WHITE}├─── Nuclei Findings:   ${nuclei_findings}${RESET}"
+    if [ "$nuclei_findings" -gt 0 ]; then
+        echo -e "${WHITE}└─── Latest Findings:${RESET}"
+        find "$results_dir" -name "nuclei_*.txt" -exec tail -n 3 {} \; 2>/dev/null | \
+            while read -r line; do
+                echo -e "${RED}    └─── $line${RESET}"
+            done
+    fi
+    echo
+
+    # API/Endpoints Section
+    echo -e "${GREEN}[+] API & Endpoints${RESET}"
+    echo -e "${WHITE}├─── GraphQL Endpoints: ${GREEN}$(wc -l < "$results_dir/graphql/endpoints.txt" 2>/dev/null || echo "0")${RESET}"
+    echo -e "${WHITE}└─── API Endpoints:     ${GREEN}$(find "$results_dir/api" -type f -name "*.txt" -exec cat {} \; 2>/dev/null | wc -l || echo "0")${RESET}"
+    echo
+
+    # Status Indicators
+    echo -e "${CYAN}╔════════════════════════════════════════════╗${RESET}"
+    if [ ! -z "$RATE_LIMIT" ]; then
+        echo -e "${CYAN}║${YELLOW} Rate Limit: ${GREEN}$RATE_LIMIT req/sec${CYAN}                   ║${RESET}"
+    fi
+    if [ "$TOOL_DELAY" -gt 0 ]; then
+        echo -e "${CYAN}║${YELLOW} Tool Delay: ${GREEN}${TOOL_DELAY}s${CYAN}                          ║${RESET}"
+    fi
+    echo -e "${CYAN}║${WHITE} Press ${RED}Ctrl+C${WHITE} to exit monitoring              ${CYAN}║${RESET}"
+    echo -e "${CYAN}╚════════════════════════════════════════════╝${RESET}"
+
+    # Time stamp
+    echo -e "\n${WHITE}Last Updated: $(date '+%H:%M:%S')${RESET}"
+}
+
+# Help menu
+function show_help() {
+    echo "Usage: $0 [options] <target-domain>"
+    echo
+    echo "Options:"
+    echo "  -h, --help            Show this help message"
+    echo "  -s, --shodan          Specify Shodan API key"
+    echo "  -w, --wp              Specify WPScan API key"
+    echo "  -m, --monitor         Enable live progress monitoring"
+    echo "  -r, --rate-limit      Rate limit requests (requests per second, default: none)"
+    echo "  -d, --delay           Add delay between tools (seconds, default: 0)"
+    echo
+    echo "Examples:"
+    echo "  $0 example.com"
+    echo "  $0 -s YOUR_SHODAN_KEY example.com"
+    echo "  $0 -m -r 10 example.com        # Monitor progress with 10 req/sec limit"
+    echo "  $0 -d 2 example.com            # Add 2 second delay between tools"
+    exit 0
+}
+
+# Parse command line arguments
+POSITIONAL_ARGS=()
+MONITOR_MODE=false
+RATE_LIMIT=""
+TOOL_DELAY=0
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help)
+      show_help
+      ;;
+    -s|--shodan)
+      SHODAN_API_KEY="$2"
+      shift
+      shift
+      ;;
+    -w|--wp)
+      WPSCAN_API_KEY="$2"
+      shift
+      shift
+      ;;
+    -m|--monitor)
+      MONITOR_MODE=true
+      shift
+      ;;
+    -r|--rate-limit)
+      RATE_LIMIT="$2"
+      shift
+      shift
+      ;;
+    -d|--delay)
+      TOOL_DELAY="$2"
+      shift
+      shift
+      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      show_help
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Restore positional parameters
+set -- "${POSITIONAL_ARGS[@]}"
+
 # Check if domain is provided
 if [ -z "$1" ]; then
-    echo "Usage: $0 <target-domain>"
+    echo "Error: No target domain specified"
+    show_help
+fi
+
+# Validate domain format (basic check)
+if ! echo "$1" | grep -qP '(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)'; then
+    echo "Error: Invalid domain format. Please provide a valid domain (e.g., example.com)"
     exit 1
 fi
 
@@ -36,6 +187,36 @@ SHODAN_API_KEY="YOUR_SHODAN_API_KEY"  # Replace with your Shodan API key
 
 echo "[+] Starting full bug bounty reconnaissance for: $DOMAIN"
 mkdir -p $RESULTS_DIR/{screenshots,content-discovery,js-files,params,api,wordpress,graphql}
+
+# Rate limiting function
+function rate_limit_cmd() {
+    if [ ! -z "$RATE_LIMIT" ]; then
+        echo "[+] Rate limiting enabled: $RATE_LIMIT requests/second"
+        # Add rate limiting parameters to tools that support it
+        RATE_PARAM="--rate-limit $RATE_LIMIT"
+    else
+        RATE_PARAM=""
+    fi
+}
+
+# Tool delay function
+function tool_delay() {
+    if [ "$TOOL_DELAY" -gt 0 ]; then
+        echo "[+] Waiting $TOOL_DELAY seconds before next tool..."
+        sleep "$TOOL_DELAY"
+    fi
+}
+
+# Start monitoring in background if enabled
+if [ "$MONITOR_MODE" = true ]; then
+    while true; do
+        show_progress "$RESULTS_DIR"
+        sleep 5
+    done &
+    MONITOR_PID=$!
+    # Trap to kill monitoring on script exit
+    trap 'kill $MONITOR_PID 2>/dev/null' EXIT
+fi
 
 # 1️⃣ Subdomain Enumeration
 echo "[+] Running subfinder..."
