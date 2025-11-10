@@ -1,0 +1,50 @@
+# Custom Security Rules for Scout
+# Add your own vulnerability patterns here
+
+- id: CUSTOM-001
+  name: Hardcoded Address
+  description: Contract contains hardcoded addresses which may be problematic
+  severity: low
+  category: best-practice
+  pattern: '0x[0-9a-fA-F]{40}'
+  antipattern: 'address\(0\)'
+  recommendation: Consider using constructor parameters or configuration for addresses
+  references:
+    - https://consensys.github.io/smart-contract-best-practices/
+  enabled: true
+
+- id: CUSTOM-002
+  name: Floating Pragma
+  description: Pragma statement allows floating compiler version
+  severity: informational
+  category: best-practice
+  pattern: 'pragma solidity \^'
+  recommendation: Lock pragma to specific compiler version for production
+  references:
+    - https://consensys.github.io/smart-contract-best-practices/development-recommendations/solidity-specific/locking-pragmas/
+  enabled: true
+
+- id: CUSTOM-003
+  name: Unprotected Ether Transfer
+  description: Direct ether transfer without access control
+  severity: medium
+  category: access-control
+  patterns:
+    - '\.transfer\('
+    - 'payable\('
+  antipattern: 'onlyOwner|require\(msg\.sender'
+  recommendation: Add access control to functions that transfer ether
+  enabled: true
+
+- id: CUSTOM-004
+  name: Block Values as Time
+  description: Using block.number or block.timestamp for time-based logic
+  severity: low
+  category: timestamp-dependence
+  patterns:
+    - 'block\.timestamp'
+    - 'block\.number'
+  recommendation: Be aware that miners can manipulate these values within limits
+  references:
+    - https://consensys.github.io/smart-contract-best-practices/development-recommendations/solidity-specific/timestamp-dependence/
+  enabled: true

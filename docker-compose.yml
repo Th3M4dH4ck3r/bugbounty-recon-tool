@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  scout:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scout-scanner
+    volumes:
+      - ./contracts:/app/contracts:ro
+      - ./reports:/app/reports
+      - ./pocs:/app/pocs
+      - ./artifacts:/app/artifacts
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+    command: scan --target /app/contracts --output /app/reports
+    networks:
+      - scout-network
+
+  scout-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scout-api-server
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./reports:/app/reports
+      - ./pocs:/app/pocs
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=production
+      - API_PORT=3000
+      - API_HOST=0.0.0.0
+    command: server --port 3000
+    networks:
+      - scout-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Local Hardhat node for testing
+  hardhat:
+    image: ghcr.io/foundry-rs/foundry:latest
+    container_name: scout-anvil
+    ports:
+      - "8545:8545"
+    command: anvil --host 0.0.0.0 --port 8545
+    networks:
+      - scout-network
+
+networks:
+  scout-network:
+    driver: bridge
+
+volumes:
+  scout-data:

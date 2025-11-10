@@ -1,0 +1,56 @@
+[
+  {
+    "id": "finding-001",
+    "contract": "SimpleBank",
+    "source": "static",
+    "rule_id": "SC-REENT-01",
+    "title": "Reentrancy in withdraw()",
+    "severity": "high",
+    "impact": "Attacker can drain contract funds through recursive calls",
+    "likelihood": "high",
+    "confidence": "high",
+    "description": "The withdraw function updates the balance after making an external call, allowing an attacker to recursively call withdraw before the balance is updated.",
+    "recommendation": "Apply the checks-effects-interactions pattern by updating balances before making external calls, or use OpenZeppelin's ReentrancyGuard.",
+    "files": [
+      {
+        "path": "contracts/SimpleBank.sol",
+        "line_start": 27,
+        "line_end": 38,
+        "snippet": "function withdraw(uint256 amount) public {\n    require(balances[msg.sender] >= amount);\n    (bool success, ) = msg.sender.call{value: amount}(\"\");\n    require(success);\n    balances[msg.sender] -= amount;\n}"
+      }
+    ],
+    "evidence": [],
+    "tags": ["reentrancy", "critical-vulnerability"],
+    "references": [
+      "https://consensys.github.io/smart-contract-best-practices/attacks/reentrancy/"
+    ],
+    "created_at": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "finding-002",
+    "contract": "SimpleBank",
+    "source": "static",
+    "rule_id": "SC-ACCESS-01",
+    "title": "Missing Access Control on emergencyWithdraw",
+    "severity": "critical",
+    "impact": "Anyone can drain all contract funds",
+    "likelihood": "high",
+    "confidence": "high",
+    "description": "The emergencyWithdraw function lacks access control, allowing any user to withdraw all funds from the contract.",
+    "recommendation": "Add an onlyOwner modifier or use OpenZeppelin's Ownable/AccessControl.",
+    "files": [
+      {
+        "path": "contracts/SimpleBank.sol",
+        "line_start": 46,
+        "line_end": 49,
+        "snippet": "function emergencyWithdraw() public {\n    payable(msg.sender).transfer(address(this).balance);\n}"
+      }
+    ],
+    "evidence": [],
+    "tags": ["access-control", "critical-vulnerability"],
+    "references": [
+      "https://docs.openzeppelin.com/contracts/4.x/access-control"
+    ],
+    "created_at": "2024-01-01T00:00:00.000Z"
+  }
+]

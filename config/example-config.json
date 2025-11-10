@@ -1,0 +1,61 @@
+{
+  "target": "./contracts",
+  "analyzers": {
+    "static": {
+      "enabled": true,
+      "rules": "./config/rules.yaml",
+      "slither": false,
+      "mythx": false
+    },
+    "bytecode": {
+      "enabled": false
+    },
+    "symbolic": {
+      "enabled": false,
+      "manticore": false,
+      "echidna": false
+    },
+    "dynamic": {
+      "enabled": false,
+      "forkUrl": "http://localhost:8545"
+    }
+  },
+  "output": {
+    "reports": "./reports",
+    "pocs": "./pocs",
+    "artifacts": "./artifacts",
+    "format": "markdown"
+  },
+  "poc": {
+    "generate": true,
+    "type": "hardhat",
+    "minSeverity": "high"
+  },
+  "integrations": {
+    "slack": {
+      "enabled": false,
+      "webhookUrl": "",
+      "notifyOn": ["critical", "high"]
+    },
+    "discord": {
+      "enabled": false,
+      "webhookUrl": "",
+      "notifyOn": ["critical", "high"]
+    }
+  },
+  "security": {
+    "allowLiveTx": false,
+    "requireConfirmation": true,
+    "maxConcurrentScans": 3
+  },
+  "networks": {
+    "mainnet": {
+      "rpcUrl": "https://eth-mainnet.g.alchemy.com/v2/YOUR-API-KEY",
+      "explorerApiKey": "YOUR-ETHERSCAN-KEY"
+    },
+    "polygon": {
+      "rpcUrl": "https://polygon-rpc.com",
+      "explorerApiKey": "YOUR-POLYGONSCAN-KEY"
+    }
+  }
+}
