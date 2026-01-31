@@ -6,13 +6,13 @@ import { logger } from '../utils/logger';
 import { Finding } from '../types';
 import { runStaticRules } from './static-rules';
 import { runSlitherAnalysis } from './slither-wrapper';
-import { runMythxAnalysis } from './mythx-wrapper';
+import { runMythrilAnalysis } from './mythril-wrapper';
 
 export interface AnalyzerOptions {
   files: string[];
   rules?: string;
   enableSlither?: boolean;
-  enableMythx?: boolean;
+  enableMythril?: boolean;
   timeout?: number;
 }
 
@@ -47,16 +47,16 @@ export async function runStaticAnalysis(options: AnalyzerOptions): Promise<Findi
     }
   }
 
-  // 3. Run MythX (optional)
-  if (options.enableMythx) {
+  // 3. Run Mythril (optional)
+  if (options.enableMythril) {
     try {
-      logger.debug('Running MythX analysis...');
-      const mythxFindings = await runMythxAnalysis(options.files);
-      allFindings.push(...mythxFindings);
-      logger.info(`MythX: ${mythxFindings.length} finding(s)`);
+      logger.debug('Running Mythril symbolic analysis...');
+      const mythrilFindings = await runMythrilAnalysis(options.files, options.timeout);
+      allFindings.push(...mythrilFindings);
+      logger.info(`Mythril: ${mythrilFindings.length} finding(s)`);
     } catch (error: any) {
-      logger.warn('MythX analysis failed:', error.message);
-      logger.info('Set MYTHX_API_KEY environment variable');
+      logger.warn('Mythril analysis failed:', error.message);
+      logger.info('Install Mythril: pipx install mythril');
     }
   }
 
@@ -88,5 +88,5 @@ function deduplicateFindings(findings: Finding[]): Finding[] {
 
 export * from './static-rules';
 export * from './slither-wrapper';
-export * from './mythx-wrapper';
+export * from './mythril-wrapper';
 export * from './rule-engine';

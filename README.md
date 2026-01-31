@@ -13,7 +13,7 @@ Scout is a full-stack security analysis tool designed for smart contract bug bou
 ### Key Features
 
 - 🔍 **Multi-Source Collection** - Etherscan, GitHub, local filesystem
-- 🛡️ **Comprehensive Analysis** - Static rules, Slither, MythX, bytecode analysis
+- 🛡️ **Comprehensive Analysis** - Static rules, Slither, Mythril symbolic execution, bytecode analysis
 - ⚡ **Automated PoC Generation** - Hardhat & Foundry test templates
 - 📊 **Professional Reporting** - Markdown, JSON with CVSS scoring
 - 🔗 **Integrations** - Slack/Discord, REST API, GitHub Actions
@@ -101,9 +101,11 @@ Create `.env`:
 
 ```env
 ETHERSCAN_API_KEY=your_key
-MYTHX_API_KEY=your_mythx_key
 ETHEREUM_RPC_URL=your_rpc_url
 ALLOW_LIVE_TX=false
+
+# Mythril runs locally - no API key needed
+# Install with: pipx install mythril
 ```
 
 Add custom rules in `config/rules.yaml`:

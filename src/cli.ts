@@ -76,7 +76,7 @@ program
   .option('-o, --output <file>', 'Output file for findings', './reports/findings.json')
   .option('-r, --rules <file>', 'Custom rules file')
   .option('--slither', 'Enable Slither integration', false)
-  .option('--mythx', 'Enable MythX integration', false)
+  .option('--mythril', 'Enable Mythril symbolic analysis', false)
   .option('--format <format>', 'Output format (json, markdown)', 'json')
   .action(async (type, options) => {
     const spinner = ora(`Running ${type} analysis...`).start();
@@ -97,7 +97,7 @@ program
         files,
         rules: options.rules,
         enableSlither: options.slither,
-        enableMythx: options.mythx,
+        enableMythril: options.mythril,
       });
 
       spinner.succeed(chalk.green(`Analysis complete: ${findings.length} finding(s)`));

@@ -6,9 +6,9 @@ export interface ApiKeys {
   etherscan?: string;
   bscscan?: string;
   polygonscan?: string;
-  mythx?: string;
   github?: string;
   tenderly?: string;
+  // Note: Mythril runs locally - no API key needed
 }
 
 export interface RpcConfig {
