@@ -15,14 +15,11 @@ function banner() {
     echo -e "\e[0m"
 }
 
-# Run the banner
-banner
-
 # Progress monitoring function
 function show_progress() {
     local results_dir="$1"
     clear
-    
+
     # Define colors
     local RED='\e[1;31m'
     local GREEN='\e[1;32m'
@@ -33,7 +30,7 @@ function show_progress() {
     local WHITE='\e[1;37m'
     local RESET='\e[0m'
     local BOLD='\e[1m'
-    
+
     # Header
     echo -e "${CYAN}╔════════════════════════════════════════════╗${RESET}"
     echo -e "${CYAN}║${BOLD}         🎯 RECON PROGRESS MONITOR 🎯        ${CYAN}║${RESET}"
@@ -81,7 +78,7 @@ function show_progress() {
 
     # Status Indicators
     echo -e "${CYAN}╔════════════════════════════════════════════╗${RESET}"
-    if [ ! -z "$RATE_LIMIT" ]; then
+    if [ -n "$RATE_LIMIT" ]; then
         echo -e "${CYAN}║${YELLOW} Rate Limit: ${GREEN}$RATE_LIMIT req/sec${CYAN}                   ║${RESET}"
     fi
     if [ "$TOOL_DELAY" -gt 0 ]; then
@@ -113,6 +110,10 @@ function show_help() {
     echo "  $0 -d 2 example.com            # Add 2 second delay between tools"
     exit 0
 }
+
+# Default API keys (overridden by command line flags)
+SHODAN_API_KEY=""
+WPSCAN_API_KEY=""
 
 # Parse command line arguments
 POSITIONAL_ARGS=()
@@ -176,23 +177,22 @@ if ! echo "$1" | grep -qP '(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-
 fi
 
 # Configuration
-DOMAIN=$1
+DOMAIN="$1"
 WORDLIST="/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt"
 DIR_WORDLIST="/usr/share/seclists/Discovery/Web-Content/common.txt"
 RESOLVERS="resolvers.txt"
 RESULTS_DIR="results/$DOMAIN"
 
-# API Keys
-SHODAN_API_KEY="YOUR_SHODAN_API_KEY"  # Replace with your Shodan API key
+# Run the banner (after domain is set)
+banner "$DOMAIN"
 
 echo "[+] Starting full bug bounty reconnaissance for: $DOMAIN"
-mkdir -p $RESULTS_DIR/{screenshots,content-discovery,js-files,params,api,wordpress,graphql}
+mkdir -p "$RESULTS_DIR"/{screenshots,content-discovery,js-files,params,api,wordpress,graphql}
 
 # Rate limiting function
 function rate_limit_cmd() {
-    if [ ! -z "$RATE_LIMIT" ]; then
+    if [ -n "$RATE_LIMIT" ]; then
         echo "[+] Rate limiting enabled: $RATE_LIMIT requests/second"
-        # Add rate limiting parameters to tools that support it
         RATE_PARAM="--rate-limit $RATE_LIMIT"
     else
         RATE_PARAM=""
@@ -214,180 +214,204 @@ if [ "$MONITOR_MODE" = true ]; then
         sleep 5
     done &
     MONITOR_PID=$!
-    # Trap to kill monitoring on script exit
     trap 'kill $MONITOR_PID 2>/dev/null' EXIT
 fi
 
-# 1️⃣ Subdomain Enumeration
+# 1. Subdomain Enumeration
 echo "[+] Running subfinder..."
-subfinder -d $DOMAIN -o $RESULTS_DIR/subfinder.txt
+subfinder -d "$DOMAIN" -o "$RESULTS_DIR/subfinder.txt"
+tool_delay
 
 echo "[+] Running amass..."
-amass enum -passive -d $DOMAIN -o $RESULTS_DIR/amass.txt
+amass enum -passive -d "$DOMAIN" -o "$RESULTS_DIR/amass.txt"
+tool_delay
 
 echo "[+] Fetching subdomains from crt.sh..."
-curl -s "https://crt.sh/?q=%25.$DOMAIN&output=json" | jq -r '.[].name_value' | sed 's/\*\.//g' | sort -u > $RESULTS_DIR/crtsh.txt
+curl -s "https://crt.sh/?q=%25.$DOMAIN&output=json" | jq -r '.[].name_value' | sed 's/\*\.//g' | sort -u > "$RESULTS_DIR/crtsh.txt"
+tool_delay
 
-# 2️⃣ Brute-Force Subdomains
+# 2. Brute-Force Subdomains
 echo "[+] Fetching fresh resolvers..."
-curl -s https://public-dns.info/nameservers.txt -o $RESOLVERS
+curl -s https://public-dns.info/nameservers.txt -o "$RESOLVERS"
 
-# Check if puredns is installed
 if command -v puredns &> /dev/null; then
     echo "[+] Running puredns brute-force..."
-    puredns bruteforce $WORDLIST $DOMAIN -r $RESOLVERS -o $RESULTS_DIR/puredns.txt
+    puredns bruteforce "$WORDLIST" "$DOMAIN" -r "$RESOLVERS" -o "$RESULTS_DIR/puredns.txt"
 else
     echo "[!] puredns not found - skipping brute-force step"
-    touch $RESULTS_DIR/puredns.txt  # Create empty file to prevent cat errors
+    touch "$RESULTS_DIR/puredns.txt"
 fi
+tool_delay
 
-# 3️⃣ Merge & Deduplicate
+# 3. Merge & Deduplicate
 echo "[+] Merging all subdomains..."
-cat $RESULTS_DIR/subfinder.txt $RESULTS_DIR/amass.txt $RESULTS_DIR/crtsh.txt $RESULTS_DIR/puredns.txt 2>/dev/null | sort -u > $RESULTS_DIR/all_subdomains.txt
+cat "$RESULTS_DIR/subfinder.txt" "$RESULTS_DIR/amass.txt" "$RESULTS_DIR/crtsh.txt" "$RESULTS_DIR/puredns.txt" 2>/dev/null | sort -u > "$RESULTS_DIR/all_subdomains.txt"
 
-# 4️⃣ Check Live Subdomains
+# 4. Check Live Subdomains
 echo "[+] Checking for live subdomains..."
 if command -v httpx &> /dev/null; then
-    cat $RESULTS_DIR/all_subdomains.txt | httpx -silent -o $RESULTS_DIR/live_subdomains.txt
+    httpx -silent -l "$RESULTS_DIR/all_subdomains.txt" -o "$RESULTS_DIR/live_subdomains.txt"
 else
     echo "[!] httpx not found - copying all subdomains as live"
-    cp $RESULTS_DIR/all_subdomains.txt $RESULTS_DIR/live_subdomains.txt
+    cp "$RESULTS_DIR/all_subdomains.txt" "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
-# 5️⃣ Port Scanning & Shodan Enumeration
-echo "[+] Running naabu and Shodan scans..."
+# 5. Port Scanning & Shodan Enumeration
+echo "[+] Running port scans and Shodan enumeration..."
 
 # Shodan enumeration
-echo "[+] Querying Shodan for: $DOMAIN"
-if [ ! -z "$SHODAN_API_KEY" ]; then
+if [ -n "$SHODAN_API_KEY" ]; then
+    echo "[+] Querying Shodan for: $DOMAIN"
     curl -s "https://api.shodan.io/shodan/host/search?key=$SHODAN_API_KEY&query=hostname:$DOMAIN" \
         | jq '.' > "$RESULTS_DIR/shodan_results.json"
-    
-    # Extract IPs and ports from Shodan results
+
     if [ -f "$RESULTS_DIR/shodan_results.json" ]; then
         jq -r '.matches[].ip_str' "$RESULTS_DIR/shodan_results.json" > "$RESULTS_DIR/shodan_ips.txt"
         jq -r '.matches[].ports[]' "$RESULTS_DIR/shodan_results.json" 2>/dev/null >> "$RESULTS_DIR/ports.txt"
     fi
     echo "[+] Shodan results saved to: $RESULTS_DIR/shodan_results.json"
 else
-    echo "[!] Shodan API key not configured - skipping Shodan enumeration"
+    echo "[!] Shodan API key not configured - use -s flag to provide one"
 fi
+tool_delay
 
 # Naabu port scanning
 if command -v naabu &> /dev/null; then
-    naabu -iL $RESULTS_DIR/live_subdomains.txt -o $RESULTS_DIR/ports.txt
+    naabu -iL "$RESULTS_DIR/live_subdomains.txt" -o "$RESULTS_DIR/ports.txt"
 else
     echo "[!] naabu not found - skipping port scanning"
-    touch $RESULTS_DIR/ports.txt
+    touch "$RESULTS_DIR/ports.txt"
 fi
+tool_delay
 
-# 6️⃣ Screenshots
+# 6. Screenshots
 echo "[+] Capturing screenshots..."
 if command -v gowitness &> /dev/null; then
-    gowitness file -f $RESULTS_DIR/live_subdomains.txt --screenshot-path $RESULTS_DIR/screenshots/
+    gowitness file -f "$RESULTS_DIR/live_subdomains.txt" --screenshot-path "$RESULTS_DIR/screenshots/"
 else
     echo "[!] gowitness not found - skipping screenshots"
 fi
+tool_delay
 
-# 7️⃣ Content Discovery
+# 7. Content Discovery
 echo "[+] Running gobuster..."
 if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
-        gobuster dir -u $url -w $DIR_WORDLIST -o "$RESULTS_DIR/content-discovery/gobuster-$(echo $url | cut -d/ -f3).txt"
-    done < $RESULTS_DIR/live_subdomains.txt
+    while read -r url; do
+        gobuster dir -u "$url" -w "$DIR_WORDLIST" -o "$RESULTS_DIR/content-discovery/gobuster-$(echo "$url" | cut -d/ -f3).txt"
+    done < "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
 echo "[+] Running dirsearch..."
 if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
-        dirsearch -u $url -w $DIR_WORDLIST -o "$RESULTS_DIR/content-discovery/dirsearch-$(echo $url | cut -d/ -f3).txt"
-    done < $RESULTS_DIR/live_subdomains.txt
+    while read -r url; do
+        dirsearch -u "$url" -w "$DIR_WORDLIST" -o "$RESULTS_DIR/content-discovery/dirsearch-$(echo "$url" | cut -d/ -f3).txt"
+    done < "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
-# 8️⃣ JavaScript Enumeration
+# 8. JavaScript Enumeration
 echo "[+] Extracting JS files..."
 if command -v katana &> /dev/null; then
-    katana -list $RESULTS_DIR/live_subdomains.txt -jc -kf -o $RESULTS_DIR/js-files/all_js.txt
+    katana -list "$RESULTS_DIR/live_subdomains.txt" -jc -kf -o "$RESULTS_DIR/js-files/all_js.txt"
 else
     echo "[!] katana not found - skipping JS extraction"
-    touch $RESULTS_DIR/js-files/all_js.txt
+    touch "$RESULTS_DIR/js-files/all_js.txt"
 fi
+tool_delay
 
 echo "[+] Running getJS..."
 if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
+    while read -r url; do
         if command -v getJS &> /dev/null; then
-            getJS --url $url | tee -a $RESULTS_DIR/js-files/getjs_$(echo $url | cut -d/ -f3).txt
+            getJS --url "$url" | tee -a "$RESULTS_DIR/js-files/getjs_$(echo "$url" | cut -d/ -f3).txt"
         fi
-    done < $RESULTS_DIR/live_subdomains.txt
+    done < "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
-# 9️⃣ Parameter Discovery
+# 9. Parameter Discovery
 echo "[+] Running ParamSpider..."
 if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
+    while read -r url; do
+        local_domain=$(echo "$url" | cut -d/ -f3)
         if [ -f ~/tools/ParamSpider/paramspider.py ]; then
-            python3 ~/tools/ParamSpider/paramspider.py -d $(echo $url | cut -d/ -f3) --output "$RESULTS_DIR/params/$(echo $url | cut -d/ -f3).txt"
+            python3 ~/tools/ParamSpider/paramspider.py -d "$local_domain" --output "$RESULTS_DIR/params/${local_domain}.txt"
         fi
-    done < $RESULTS_DIR/live_subdomains.txt
+    done < "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
-# 🔟 API Enumeration
+# 10. API Enumeration
 echo "[+] Running waybackurls & gau..."
 if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
+    while read -r url; do
+        local_domain=$(echo "$url" | cut -d/ -f3)
         if command -v waybackurls &> /dev/null; then
-            echo $url | waybackurls | tee -a $RESULTS_DIR/api/wayback_$(echo $url | cut -d/ -f3).txt
+            echo "$url" | waybackurls | tee -a "$RESULTS_DIR/api/wayback_${local_domain}.txt"
         fi
         if command -v gau &> /dev/null; then
-            echo $url | gau | tee -a $RESULTS_DIR/api/gau_$(echo $url | cut -d/ -f3).txt
+            echo "$url" | gau | tee -a "$RESULTS_DIR/api/gau_${local_domain}.txt"
         fi
-    done < $RESULTS_DIR/live_subdomains.txt
+    done < "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
-# 1️⃣1️⃣ WordPress Scanning
+# 11. WordPress Scanning
 echo "[+] Running WPScan..."
 if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
+    while read -r url; do
         if command -v wpscan &> /dev/null; then
-            wpscan --url $url --enumerate vp,ap,u --api-token YOUR_WPSCAN_API_KEY -o "$RESULTS_DIR/wordpress/wpscan_$(echo $url | cut -d/ -f3).txt"
-        fi
-    done < $RESULTS_DIR/live_subdomains.txt
-fi
-
-# 1️⃣2️⃣ GraphQL Detection & Exploitation
-echo "[+] Searching for GraphQL endpoints..."
-if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-    while read url; do
-        if curl -s "$url/graphql" | grep -q "GraphQL"; then
-            echo "$url/graphql" | tee -a $RESULTS_DIR/graphql/endpoints.txt
-            if command -v graphqlmap &> /dev/null; then
-                graphqlmap -u "$url/graphql" --json -o "$RESULTS_DIR/graphql/graphqlmap_$(echo $url | cut -d/ -f3).json"
+            if [ -n "$WPSCAN_API_KEY" ]; then
+                wpscan --url "$url" --enumerate vp,ap,u --api-token "$WPSCAN_API_KEY" -o "$RESULTS_DIR/wordpress/wpscan_$(echo "$url" | cut -d/ -f3).txt"
+            else
+                wpscan --url "$url" --enumerate vp,ap,u -o "$RESULTS_DIR/wordpress/wpscan_$(echo "$url" | cut -d/ -f3).txt"
+                echo "[!] WPScan running without API key - use -w flag for vulnerability data"
             fi
         fi
-    done < $RESULTS_DIR/live_subdomains.txt
+    done < "$RESULTS_DIR/live_subdomains.txt"
 fi
+tool_delay
 
-# 1️⃣3️⃣ Vulnerability Scanning
+# 12. GraphQL Detection & Exploitation
+echo "[+] Searching for GraphQL endpoints..."
+if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
+    while read -r url; do
+        if curl -s "$url/graphql" | grep -q "GraphQL"; then
+            echo "$url/graphql" | tee -a "$RESULTS_DIR/graphql/endpoints.txt"
+            if command -v graphqlmap &> /dev/null; then
+                graphqlmap -u "$url/graphql" --json -o "$RESULTS_DIR/graphql/graphqlmap_$(echo "$url" | cut -d/ -f3).json"
+            fi
+        fi
+    done < "$RESULTS_DIR/live_subdomains.txt"
+fi
+tool_delay
+
+# 13. Vulnerability Scanning
 echo "[+] Running nuclei..."
 if command -v nuclei &> /dev/null; then
     if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-        nuclei -l $RESULTS_DIR/live_subdomains.txt -t cves/ -o $RESULTS_DIR/nuclei_cves.txt
-        nuclei -l $RESULTS_DIR/live_subdomains.txt -t misconfiguration/ -o $RESULTS_DIR/nuclei_misconfig.txt
-        nuclei -l $RESULTS_DIR/live_subdomains.txt -t vulnerabilities/ -o $RESULTS_DIR/nuclei_vulns.txt
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t cves/ -o "$RESULTS_DIR/nuclei_cves.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t misconfiguration/ -o "$RESULTS_DIR/nuclei_misconfig.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t vulnerabilities/ -o "$RESULTS_DIR/nuclei_vulns.txt"
     fi
 else
     echo "[!] nuclei not found - skipping vulnerability scanning"
 fi
 
-# 🚀 Summary
+# Summary
+echo ""
 echo "[+] Recon complete for: $DOMAIN"
-echo "[+] Shodan data: $RESULTS_DIR/shodan_results.json"
-echo "[+] Total subdomains: $(wc -l < $RESULTS_DIR/all_subdomains.txt 2>/dev/null || echo '0')"
-echo "[+] Live subdomains: $(wc -l < $RESULTS_DIR/live_subdomains.txt 2>/dev/null || echo '0')"
-echo "[+] Open ports: $(wc -l < $RESULTS_DIR/ports.txt 2>/dev/null || echo '0')"
-echo "[+] JS files: $(wc -l < $RESULTS_DIR/js-files/all_js.txt 2>/dev/null || echo '0')"
-echo "[+] API endpoints: $(find $RESULTS_DIR/api/ -type f -name "wayback_*.txt" -exec wc -l {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || echo '0')"
+echo "[+] Results directory: $RESULTS_DIR/"
+if [ -n "$SHODAN_API_KEY" ]; then
+    echo "[+] Shodan data: $RESULTS_DIR/shodan_results.json"
+fi
+echo "[+] Total subdomains: $(wc -l < "$RESULTS_DIR/all_subdomains.txt" 2>/dev/null || echo '0')"
+echo "[+] Live subdomains: $(wc -l < "$RESULTS_DIR/live_subdomains.txt" 2>/dev/null || echo '0')"
+echo "[+] Open ports: $(wc -l < "$RESULTS_DIR/ports.txt" 2>/dev/null || echo '0')"
+echo "[+] JS files: $(wc -l < "$RESULTS_DIR/js-files/all_js.txt" 2>/dev/null || echo '0')"
+echo "[+] API endpoints: $(find "$RESULTS_DIR/api/" -type f -name "wayback_*.txt" -exec wc -l {} + 2>/dev/null | awk '{sum+=$1} END {print sum}' || echo '0')"
 echo "[+] WordPress reports: $RESULTS_DIR/wordpress/"
 echo "[+] GraphQL reports: $RESULTS_DIR/graphql/"
 echo "[+] Screenshots saved in: $RESULTS_DIR/screenshots/"
