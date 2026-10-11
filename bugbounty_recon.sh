@@ -392,9 +392,12 @@ tool_delay
 echo "[+] Running nuclei..."
 if command -v nuclei &> /dev/null; then
     if [ -f "$RESULTS_DIR/live_subdomains.txt" ]; then
-        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t cves/ -o "$RESULTS_DIR/nuclei_cves.txt"
-        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t misconfiguration/ -o "$RESULTS_DIR/nuclei_misconfig.txt"
-        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t vulnerabilities/ -o "$RESULTS_DIR/nuclei_vulns.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t http/cves/ -o "$RESULTS_DIR/nuclei_cves.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t http/misconfiguration/ -o "$RESULTS_DIR/nuclei_misconfig.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t http/vulnerabilities/ -o "$RESULTS_DIR/nuclei_vulns.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t dast/ -o "$RESULTS_DIR/nuclei_dast.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t http/exposed-panels/ -o "$RESULTS_DIR/nuclei_panels.txt"
+        nuclei -l "$RESULTS_DIR/live_subdomains.txt" -t http/exposures/ -o "$RESULTS_DIR/nuclei_exposures.txt"
     fi
 else
     echo "[!] nuclei not found - skipping vulnerability scanning"
